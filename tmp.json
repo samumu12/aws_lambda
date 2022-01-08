@@ -1,0 +1,78 @@
+{
+    'sessionId': '966734203575284',
+    'inputTranscript': '01-01-2022',
+    'interpretations': [
+        {
+            'intent': {
+                'slots': {
+                    'interventionDate': {
+                        'shape': 'Scalar',
+                        'value': {
+                            'originalValue': '01-01-2022',
+                            'resolvedValues': ['2022-01-01'],
+                            'interpretedValue': '2022-01-01'
+                        }
+                    },
+                    'interventionType': {
+                        'shape': 'Scalar',
+                        'value': {
+                            'originalValue': 'MRI',
+                            'resolvedValues': ['mri'],
+                            'interpretedValue': 'mri'
+                        }
+                    }
+                },
+                'confirmationState': 'None',
+                'name': 'getResults',
+                'state': 'ReadyForFulfillment'
+            },
+            'nluConfidence': 1.0
+        },
+        {
+            'intent': {
+                'slots': {},
+                'confirmationState': 'None',
+                'name': 'FallbackIntent',
+                'state': 'ReadyForFulfillment'
+            }
+        }
+    ],
+    'responseContentType': 'text/plain; charset=utf-8',
+    'sessionState': {
+        'intent': {
+            'slots': {
+                'interventionDate': {
+                    'shape': 'Scalar',
+                    'value': {
+                        'originalValue': '01-01-2022',
+                        'resolvedValues': ['2022-01-01'],
+                        'interpretedValue': '2022-01-01'
+                    }
+                },
+                'interventionType': {
+                    'shape': 'Scalar',
+                    'value': {
+                        'originalValue': 'MRI',
+                        'resolvedValues': ['mri'],
+                        'interpretedValue': 'mri'
+                    }
+                }
+            },
+            'confirmationState': 'None',
+            'name': 'getResults',
+            'state': 'ReadyForFulfillment'
+        },
+        'originatingRequestId': '1ab179c3-1a7a-4d7d-b9ea-f15fc124b540'
+    },
+    'invocationSource': 'FulfillmentCodeHook',
+    'messageVersion': '1.0',
+    'inputMode': 'Text',
+    'bot': {
+        'aliasId': 'TSTALIASID',
+        'aliasName': 'TestBotAlias',
+        'name': 'MedicTalk',
+        'version': 'DRAFT',
+        'localeId': 'en_US',
+        'id': '135OMDAJNZ'
+    }
+}
