@@ -23,116 +23,80 @@ def log_smth(intent_name, msg):
 dynamodb = boto3.client('dynamodb')
 
 def log_in_db(request):
-    tableLog = dynamodb.Table('Log')
-    result = {
-        'date': str(datetime.datetime.now()),
-        'request': request
+    init_db()
+    resultLog = {
+        'date': {"S": str(datetime.datetime.now())},
+        'request': {"S":request}
     }
-    
-    tableLog.put_item(Item=result)
+
+    dynamodb.put_item(TableName='Log', Item=resultLog)
 
 
 def contact_in_db(firstname, lastname, email, situation, type):
-    tableContact = dynamodb.Table('Contact')
-    result = {
-        'firstname': firstname,
-        'lastname': lastname,
-        'email': email, 
-        'situation': situation,
-        'type': type
+    init_db()
+    resultContact = {
+        'firstname': {"S": firstname},
+        'lastname': {"S": lastname},
+        'email': {"S": email}, 
+        'situation': {"S": situation},
+        'type': {"S": type}
     }
 
-    tableContact.put_item(Item=result)
+    dynamodb.put_item(TableName='Contact', Item=resultContact)
 
 
 def init_db():
-    tableLog = dynamodb.create_table(
-        TableName='Log',
-        KeySchema=[
-            {
-                'AttributeName': 'id',
-                'KeyType': 'HASH'
-            },
-            {
-                'AttributeName': 'date',
-                'KeyType': 'RANGE'
-            },
-            {
-                'AttributeName': 'request',
-                'KeyType': 'RANGE'
+    exist = dynamodb.list_tables()['TableNames']
+    if 'Log' not in exist:
+        tableLog = dynamodb.create_table(
+            TableName='Log',
+            KeySchema=[
+                {
+                    'AttributeName': 'date',
+                    'KeyType': 'HASH'
+                },
+                {
+                    'AttributeName': 'request',
+                    'KeyType': 'RANGE'
+                }
+            ],
+            AttributeDefinitions=[
+                {
+                    'AttributeName': 'date',
+                    'AttributeType': 'S'
+                },
+                {
+                    'AttributeName': 'request',
+                    'AttributeType': 'S'
+                },
+
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 10,
+                'WriteCapacityUnits': 10
             }
-        ],
-        AttributeDefinitions=[
-            {
-                'AttributeName': 'date',
-                'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'request',
-                'AttributeType': 'S'
-            },
-
-        ],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': 10,
-            'WriteCapacityUnits': 10
-        }
-    )
+        )
+    if 'Contact' not in exist:
+        tableContact = dynamodb.create_table(
+            TableName='Contact',
+            KeySchema=[
+                {
+                    'AttributeName': 'lastname',
+                    'KeyType': 'HASH'  # Sort key
+                }
+            ],
+            AttributeDefinitions=[
+                {
+                    'AttributeName': 'lastname',
+                    'AttributeType': 'S'
+                }
     
-    tableContact = dynamodb.create_table(
-        TableName='Contact',
-        KeySchema=[
-            {
-                'AttributeName': 'firstname',
-                'KeyType': 'RANGE'  # Sort key
-            },
-            {
-                'AttributeName': 'lastname',
-                'KeyType': 'RANGE'  # Sort key
-            },
-            {
-                'AttributeName': 'email',
-                'KeyType': 'RANGE'  # Sort key
-            },
-            {
-                'AttributeName': 'situation',
-                'KeyType': 'RANGE'  # Sort key
-            },
-            {
-                'AttributeName': 'type',
-                'KeyType': 'RANGE'  # Sort key
-            },
-        ],
-        AttributeDefinitions=[
-            {
-                'AttributeName': 'firstname',
-                'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'lastname',
-                'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'email',
-                'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'situation',
-                'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'type',
-                'AttributeType': 'S'
-            },
-            
-
-        ],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': 10,
-            'WriteCapacityUnits': 10
-        }
-    )
-    return tableLog, tableContact
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 10,
+                'WriteCapacityUnits': 10
+            }
+        )
 
 
 # RETURN FUNCTIONS #
@@ -509,10 +473,7 @@ def get_contact(event):
 
 def lambda_handler(event, context):
     intent_name = event['sessionState']['intent']['name']
-    # tableLog, tableContact = init_db()
-
-    # if tableLog.table_status or tableContact.table_status :
-    #     None
+    init_db()
 
     if 'slots' not in event['sessionState']['intent']:
         event['sessionState']['intent']['slots'] = {}
