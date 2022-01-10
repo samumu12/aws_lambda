@@ -139,7 +139,7 @@ def delegate(intent_request, slots):
     }
 
 
-def change_intent(intent_request, slots, new_intent):
+def change_intent(intent_request, slots, msg, new_intent):
     log_smth(intent_request['sessionState']['intent']['name'], "Change intent to: {}".format(new_intent))
     intent_request['sessionState']['intent']['name'] = new_intent
     intent_request['sessionState']['intent']['state'] = None
@@ -151,6 +151,10 @@ def change_intent(intent_request, slots, new_intent):
             },
             'intent': intent_request['sessionState']['intent']
         },
+        'messages': [{
+            'contentType': 'PlainText',
+            'content': msg
+        }],
         'slots': slots,
         'sessionId': intent_request['sessionId'],
         'requestAttributes': intent_request['requestAttributes'] if 'requestAttributes' in intent_request else None
@@ -208,17 +212,32 @@ def search_string_tab(sentence, tab):
 
 def get_firstname(event):
     firstname = None
-    log_smth('getFirstName obj', event['sessionState'])
     if 'sessionAttributes' in event['sessionState']:
         if 'firstname' in event['sessionState']['sessionAttributes']:
             firstname = event['sessionState']['sessionAttributes']['firstname']
-    if not firstname and 'slots' in event['sessionState']['intent']:
+    if 'slots' in event['sessionState']['intent']:
         if event['sessionState']['intent']['slots'] is not None and 'firstname' in event['sessionState']['intent']['slots']:
             if event['sessionState']['intent']['slots']['firstname'] is not None:
                 firstname = event['sessionState']['intent']['slots']['firstname']['value']['interpretedValue']
                 event['sessionState']['sessionAttributes']['firstname'] = firstname
-    log_smth('getFirstName', firstname)
     return firstname
+
+
+def get_subject_info(event):
+    basicinfo = None
+    if 'sessionAttributes' in event['sessionState']:
+        if 'BasicInformation' in event['sessionState']['sessionAttributes']:
+            basicinfo = event['sessionState']['sessionAttributes']['BasicInformation']
+    if 'slots' in event['sessionState']['intent']:
+        if event['sessionState']['intent']['slots'] is not None and 'BasicInformation' in event['sessionState']['intent']['slots']:
+            if event['sessionState']['intent']['slots']['BasicInformation'] is not None:
+                basicinfo = event['sessionState']['intent']['slots']['BasicInformation']['value']['interpretedValue']
+                event['sessionState']['sessionAttributes']['BasicInformation'] = basicinfo
+    return basicinfo
+
+
+def set_subject_info(event, basic_info_type):
+    event['sessionState']['sessionAttributes']['BasicInformation'] = basic_info_type
     
     
 # LAMBDA FUNCTIONS #
@@ -266,7 +285,9 @@ def manage_jpo(event):
             return validate(event, "Yes there is a JPO today ! I register you on the list !")
         return validate(event, "Yes there is a JPO today ! Just turn left and go to the end of the corridor, some people are here to welcome you and present the school")
         
-    return decline(event, "No there is no JPO today ! But I can give you some information about the next one if you want")
+    #return decline(event, "No there is no JPO today ! But I can give you some information about the next one if you want")
+    set_subject_info(event, 'Open House day')
+    return change_intent(event, slots, "No there is no JPO today ! But I can give you some information about the next one if you want ! (answer by yes or no)", 'getContact')
 
 
 def manage_coding_club(event):
@@ -280,8 +301,9 @@ def manage_coding_club(event):
         elif firstname.capitalize() not in PEOPLE_LIST:
             return validate(event, "There is a coding club in the SciFi room, but are you sure you are registered ? I don't see your name in the list ...")
         return validate(event, "Yes there is a coding club in the SciFi room ! Just turn left and go to the end of the corridor")
-        
-    return decline(event, "No there is no coding club today ! But I can give you some information about the next one if you want")
+    
+    set_subject_info(event, 'Coding Club')
+    return change_intent(event, slots, "No there is no coding club today ! But I can give you some information about the next one if you want !  (answer by yes or no)", 'getContact')
 
 
 INF_TYPE_LIST = [
@@ -294,7 +316,7 @@ INF_TYPE_LIST = [
 
 def information_parser(event):
     global INF_TYPE_LIST
-    inf_type = event['sessionState']['intent']['slots']['BasicInformation']['value']['interpretedValue'] if 'BasicInformation' in event['sessionState']['intent']['slots'] else None
+    inf_type = get_subject_info(event)
 
     if inf_type == INF_TYPE_LIST[0]:
         return validate(event, "The school is open from monday to Friday, and from 8am to 20pm !\n\
@@ -318,14 +340,14 @@ def information_parser(event):
 
 def manage_information(event):
     global INF_TYPE_LIST
-    inf_type = event['sessionState']['intent']['slots']['BasicInformation']['value']['interpretedValue'] if 'BasicInformation' in event['sessionState']['intent']['slots'] else None
+    inf_type = get_subject_info(event)
     
     slots = {'BasicInformation': inf_type}
     
     if inf_type is None:
-        return require_smth(event, slots, "What kind of information do you want ? I can tell you about the opening hours, the price of the school, the diploma, the studies duration or the methodology. (choose one)", 'informationtype')
+        return require_smth(event, slots, "What kind of information do you want ? I can tell you about the opening hours, the price of the school, the diploma, the studies duration or the methodology. (choose one)", 'BasicInformation')
     elif inf_type not in INF_TYPE_LIST:
-        return require_smth(event, slots, "Sorry, I don't understand, what do you want to know ? I can tell you about the opening hours, the price of the school, the diploma, the studies duration or the methodology. (choose one)", 'informationtype')
+        return require_smth(event, slots, "Sorry, I don't understand, what do you want to know ? I can tell you about the opening hours, the price of the school, the diploma, the studies duration or the methodology. (choose one)", 'BasicInformation')
     
     if inf_type in INF_TYPE_LIST:
         return information_parser(event)
@@ -425,8 +447,8 @@ def manage_event(event):
         if evt['event']['type'] == inf_type:
             break
         i += 1
-    
-    return validate(event, "The next {} is on the {}, {}. ".format(events[i]['event']['type'], events[i]['date'], events[i]['event']['desc']))
+    set_subject_info(event, events[i]['event']['type'])
+    return change_intent(event, slots, "The next {} is on the {}, {}. I can contact you back for more information if you want ! (answer by yes or no)".format(events[i]['event']['type'], events[i]['date'], events[i]['event']['desc']), 'getContact')
 
 INF_TYPE_STUDENT = [
     "administration",
@@ -467,11 +489,13 @@ def student_information_parser(event) :
 
 
 def get_contact(event):
+    if event['sessionState']['intent']['confirmationState'] == 'Denied':
+        return decline(event, "No problem ! Hope I helped you yet")
     firstname = event['sessionState']['intent']['slots']['firstname']['value']['interpretedValue']
-    lastname = event['sessionState']['intent']['slots']['LastName']['value']['interpretedValue']
+    lastname = event['sessionState']['intent']['slots']['lastname']['value']['interpretedValue']
     email = event['sessionState']['intent']['slots']['email']['value']['interpretedValue']
-    situation = event['sessionState']['intent']['slots']['Situation']['value']['interpretedValue']
-    informationType = event['sessionState']['intent']['slots']['informationType']['value']['interpretedValue']
+    situation = event['sessionState']['intent']['slots']['situation']['value']['interpretedValue']
+    informationType = get_subject_info(event)
 
     contact_in_db(firstname, lastname, email, situation, informationType)
     return validate(event, "Thank you ! I am keeping you in a corner of my adress list ! I will ensure that you will get informed as soon as I have new informations !")
