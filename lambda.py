@@ -13,7 +13,7 @@ logger.setLevel(logging.DEBUG)
 
 def log_smth(intent_name, msg):
     global DEBUG
-    # TODO: Store log in DB
+    log_in_db(intent_name + " " + msg)
     if DEBUG:
         logger.debug("{} - {}: {}".format(datetime.datetime.now(), intent_name, msg))
 
@@ -26,7 +26,7 @@ def log_in_db(request):
     init_db()
     resultLog = {
         'date': {"S": str(datetime.datetime.now())},
-        'request': {"S":request}
+        'request': {"S": request}
     }
 
     dynamodb.put_item(TableName='Log', Item=resultLog)
@@ -82,7 +82,7 @@ def init_db():
             KeySchema=[
                 {
                     'AttributeName': 'lastname',
-                    'KeyType': 'HASH'  # Sort key
+                    'KeyType': 'HASH'
                 }
             ],
             AttributeDefinitions=[
@@ -121,31 +121,6 @@ def require_smth(intent_request, slots, msg, slot_name):
         'sessionId': intent_request['sessionId'],
         'requestAttributes': intent_request['requestAttributes'] if 'requestAttributes' in intent_request else None
     }
-
-    # {
-    #     "sessionState": {
-    #         "sessionAttributes": {},
-    #         "dialogAction": {
-    #             "type": "ElicitSlot",
-    #             "slotToElicit": "firstname"
-    #         },
-    #         "intent": {
-    #             "slots": {
-    #                 "firstname": null
-    #             },
-    #             "confirmationState": "None",
-    #             "name": "StudentCard",
-    #             "state": "ReadyForFulfillment"
-    #         }
-    #     },
-    #     "messages": [{
-    #         "contentType": "PlainText",
-    #         "content": "Can I get your name please"
-    #     }],
-    #     "slots": {},
-    #     "sessionId": "966734203575175",
-    #     "requestAttributes": null
-    # }
     
     
 def delegate(intent_request, slots):
@@ -166,13 +141,15 @@ def delegate(intent_request, slots):
 
 def change_intent(intent_request, slots, new_intent):
     log_smth(intent_request['sessionState']['intent']['name'], "Change intent to: {}".format(new_intent))
+    intent_request['sessionState']['intent']['name'] = new_intent
+    intent_request['sessionState']['intent']['state'] = None
     return {
         'sessionState': {
             'sessionAttributes': intent_request['sessionState']['sessionAttributes'],
             'dialogAction': {
                 'type': 'ConfirmIntent'
             },
-            'intent': new_intent
+            'intent': intent_request['sessionState']['intent']
         },
         'slots': slots,
         'sessionId': intent_request['sessionId'],
@@ -181,7 +158,7 @@ def change_intent(intent_request, slots, new_intent):
 
 
 def validate(intent_request, msg):
-    log_smth(intent_request['sessionState']['intent']['name'], "Validate")
+    log_smth(intent_request['sessionState']['intent']['name'], "Validate: " + msg)
     intent_request['sessionState']['intent']['state'] = 'Fulfilled'
     return {
         'sessionState': {
@@ -201,7 +178,7 @@ def validate(intent_request, msg):
     
     
 def decline(intent_request, msg):
-    log_smth(intent_request['sessionState']['intent']['name'], "Decline")
+    log_smth(intent_request['sessionState']['intent']['name'], "Decline: " + msg)
     intent_request['sessionState']['intent']['state'] = 'Failed'
     return {
         'sessionState': {
@@ -317,7 +294,7 @@ INF_TYPE_LIST = [
 
 def information_parser(event):
     global INF_TYPE_LIST
-    inf_type = event['sessionState']['intent']['slots']['informationtype']['value']['interpretedValue'] if 'informationtype' in event['sessionState']['intent']['slots'] else None
+    inf_type = event['sessionState']['intent']['slots']['BasicInformation']['value']['interpretedValue'] if 'BasicInformation' in event['sessionState']['intent']['slots'] else None
 
     if inf_type == INF_TYPE_LIST[0]:
         return validate(event, "The school is open from monday to Friday, and from 8am to 20pm !\n\
@@ -341,9 +318,9 @@ def information_parser(event):
 
 def manage_information(event):
     global INF_TYPE_LIST
-    inf_type = event['sessionState']['intent']['slots']['informationtype']['value']['interpretedValue'] if 'informationtype' in event['sessionState']['intent']['slots'] else None
+    inf_type = event['sessionState']['intent']['slots']['BasicInformation']['value']['interpretedValue'] if 'BasicInformation' in event['sessionState']['intent']['slots'] else None
     
-    slots = {'informationtype': inf_type}
+    slots = {'BasicInformation': inf_type}
     
     if inf_type is None:
         return require_smth(event, slots, "What kind of information do you want ? I can tell you about the opening hours, the price of the school, the diploma, the studies duration or the methodology. (choose one)", 'informationtype')
@@ -351,7 +328,7 @@ def manage_information(event):
         return require_smth(event, slots, "Sorry, I don't understand, what do you want to know ? I can tell you about the opening hours, the price of the school, the diploma, the studies duration or the methodology. (choose one)", 'informationtype')
     
     if inf_type in INF_TYPE_LIST:
-        return change_intent(event, slots, 'InformationParser')
+        return information_parser(event)
         
     return decline(event, "Sorry I don't understand what you want, maybe try to rephrase ...")
     
@@ -387,9 +364,18 @@ def manage_student_card(event):
     return validate(event, "You can pick up your student card in the left corridor you will see a room with the administration.")
 
 
+def manage_event_type(inf_type, eventType):
+    for elm in eventType:
+        if inf_type == elm['type']:
+            return True
+    return False
+
+
 def manage_event(event):
     #nom date type desc
-    eventsType = {
+    inf_type = event['sessionState']['intent']['slots']['EventType']['value']['interpretedValue'] if 'EventType' in event['sessionState']['intent']['slots'] else None
+
+    eventsType = [
         {
             "type": "Gamejam",
             "desc": "this is an event where you can try to create a video game in less than 48 hours."
@@ -401,9 +387,18 @@ def manage_event(event):
         {
             "type": "Coding club",
             "desc": "this is a day where you can come to a lesson with student to learn basics in code"
+        },
+        {
+            "type": "Hubtalk",
+            "desc": "This is an event where you can talk about new technologies news with the other epitech's student"
+        },
+        {
+            "type": "Hubnight",
+            "desc": "This is an event where you can challenge yourself against the other student on an innovative subject"
         }
-    }
-    events = {
+    ]
+
+    events = [
         {
             "event": eventsType[0],
             "date": datetime.date(year=2022, month=1, day=28)
@@ -416,40 +411,53 @@ def manage_event(event):
             "event": eventsType[2],
             "date": datetime.date(year=2022, month=2, day=19)
         }
-    }
-        
-    return validate(event, "The next events is {}, {} and it take place at {}. ".format(events[0].event.type, events[0].event.desc, events[0].date))
+    ]
+
+    slots = {'EventType': inf_type}
+
+    if inf_type is None:
+        return require_smth(event, slots, "What kind of event is interesting you ? I can tell you about the Gamejam or about an Open house day or about a Coding club.(choose one)", 'EventType')
+    elif not manage_event_type(inf_type, eventsType):
+        return decline(event, "Sorry but I don't understand which type you are talking. Can you repeat or rephrase ?")
+    
+    i = 0
+    for evt in events:
+        if evt['event']['type'] == inf_type:
+            break
+        i += 1
+    
+    return validate(event, "The next {} is on the {}, {}. ".format(events[i]['event']['type'], events[i]['date'], events[i]['event']['desc']))
 
 INF_TYPE_STUDENT = [
     "administration",
-    "peda"
+    "pedagogy"
 ]
 
 def manage_student(event):
     global INF_TYPE_STUDENT
-    inf_type = event['sessionState']['intent']['slots']['informationtype']['value']['interpretedValue'] if 'informationtype' in event['sessionState']['intent']['slots'] else None
+    inf_type = event['sessionState']['intent']['slots']['StudentInfo']['value']['interpretedValue'] if 'StudentInfo' in event['sessionState']['intent']['slots'] else None
     
-    slots = {'informationtype': inf_type}
+    slots = {'StudentInfo': inf_type}
     
     if inf_type is None:
-        return require_smth(event, slots, "What kind of information do you want ? I can tell you about the administration or about an event. (choose one)", 'informationtype')
-    elif inf_type not in INF_TYPE_LIST:
-        return require_smth(event, slots, "Sorry, I don't understand, what do you want to know ? I can tell you about the administration or about an event. (choose one)", 'informationtype')
+        return require_smth(event, slots, "What kind of information do you want ? I can tell you about the administration team or about the pedagogy team. (choose one)", 'StudentInfo')
+    elif inf_type not in INF_TYPE_STUDENT:
+        return require_smth(event, slots, "Sorry, I don't understand, what do you want to know ? I can tell you about  the administration team or about the pedagogy team. (choose one)", 'StudentInfo')
     
-    if inf_type in INF_TYPE_LIST:
-        return change_intent(event, slots, 'InformationStudentParser')
+    if inf_type in INF_TYPE_STUDENT:
+        return student_information_parser(event)
         
     return decline(event, "Sorry I don't understand what you want, maybe try to rephrase ...")
     
 
 def student_information_parser(event) :
     global INF_TYPE_STUDENT
-    inf_type = event['sessionState']['intent']['slots']['informationtype']['value']['interpretedValue'] if 'informationtype' in event['sessionState']['intent']['slots'] else None
+    inf_type = event['sessionState']['intent']['slots']['StudentInfo']['value']['interpretedValue'] if 'StudentInfo' in event['sessionState']['intent']['slots'] else None
 
     if INF_TYPE_STUDENT[0] == inf_type:
-        return validate(event, "If you want to take an appointment you can go in the office of MS. RABACCA")
+        return validate(event, "If you want to take an appointment with the administration you can go in the office of MS. RABACCA")
     elif INF_TYPE_STUDENT[1] == inf_type:
-        return validate(event, "If you want to take an appointment you can go in the office of MR. GOBY")
+        return validate(event, "If you want to take an appointment with the pedagogy you can go in the office of MR. GOBY")
 
     if random.choice([0, 1]) == 0:
         return decline(event, "Sorry, I think I can't help you on this request ... I'm a bit limited sorry ! Maybe try to reformulate ?")
@@ -465,7 +473,7 @@ def get_contact(event):
     situation = event['sessionState']['intent']['slots']['Situation']['value']['interpretedValue']
     informationType = event['sessionState']['intent']['slots']['informationType']['value']['interpretedValue']
 
-    # TODO: Store values in DB
+    contact_in_db(firstname, lastname, email, situation, informationType)
     return validate(event, "Thank you ! I am keeping you in a corner of my adress list ! I will ensure that you will get informed as soon as I have new informations !")
 
 
